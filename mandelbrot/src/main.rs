@@ -105,6 +105,7 @@ impl View {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tilekit::enable_jit_cache()?;
     match Cli::parse().cmd {
         Cmd::Render { view, out, cpu } => {
             let tile = view.tile;

@@ -7,7 +7,8 @@ into CUDA kernels.
 
 ![raymarch: SDF scene with soft shadows, ambient occlusion and fog](docs/images/raymarch.png)
 
-Each crate in this workspace is one self-contained demo. Every demo includes:
+Each crate in this workspace is one demo (plus `tilekit`, a few shared host
+helpers). Every demo includes:
 
 - a CPU reference (rayon) with the same math, which checks the GPU output,
 - a `bench` command comparing CPU and GPU times (and, from `life` on, the
@@ -93,9 +94,8 @@ cargo run --release -p <crate> -- --help      # every command and option
 ```
 
 The first run of each demo JIT compiles its kernels. That takes under a second
-for `mandelbrot` and about 30 s for `raymarch`. `raymarch` and `light2d` save
-compiled kernels to `~/.cache/cutile/kernels`, so later runs start in a few
-seconds.
+for `mandelbrot` and about 30 s for `raymarch`. Compiled kernels are saved to
+`~/.cache/cutile/kernels`, so later runs start in 0.3-4 s.
 
 ## Layout
 
@@ -106,6 +106,7 @@ Every crate follows the same shape:
 <crate>/src/cpu.rs    the same math on the CPU, for checking and benchmarks
 <crate>/src/main.rs   clap CLI: run / render / bench (and check)
 <crate>/README.md     results, lessons, gotchas, ideas
+tilekit/src/          shared: pinned transfer buffers, Submit trait, JIT cache switch
 ```
 
 ## What the demos teach
@@ -118,6 +119,7 @@ Every crate follows the same shape:
 | "Valid" convolutions that need no block arithmetic at all                    | `filters`              |
 | CUDA graphs: ping-pong buffers, no allocation, when they pay off             | `life`, `filters`, `light2d` |
 | One `Submit` trait so the same pipeline runs eagerly or records a graph      | `filters`, `light2d`   |
+| Pinned host buffers: transfers without per-frame allocation                  | `filters`, `tilekit`   |
 | A whole shading pipeline in one kernel, with parameters in a device buffer   | `raymarch`             |
 | Data-dependent reads through `unsafe` pointer gathers                        | `light2d`              |
 | JIT costs: compile time, the disk cache, specialization on divisibility      | `raymarch`, `light2d`  |

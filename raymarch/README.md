@@ -45,8 +45,11 @@ RTX 4070 Ti SUPER, i9-14900KF (28 threads), WSL2, 1920x1080, default camera.
 | high (256 / 64)                | 256 ms    | 4.14 ms   | 4.10 ms   | 9.58 ms            |
 
 That's 55-62x faster than rayon. The window at 1280x720, medium quality, runs at
-about 310 fps: 1.65 ms rendering, 0.4 ms downloading and 0.12 ms uploading
-parameters.
+about 335 fps: 1.65 ms rendering, 0.23 ms downloading and 0.05 ms uploading
+parameters, through pinned host buffers (`tilekit::Pinned`; see
+`filters/README.md`). With pageable transfers it was 310 fps, with a 0.4 ms
+download. The remaining millisecond per frame is the window: presenting the
+image and polling input.
 
 `render` and `bench` compare the GPU frame with the CPU renderer. The largest
 per-channel difference is 1 level out of 255.
@@ -107,7 +110,8 @@ into different hits.
   samples into a `for` loop cut it to 26 s. The final kernel takes about 31 s.
   Separately, IR construction costs about 1.4 s on every start, even with a disk
   cache hit.
-- **The disk cache is opt-in.** Call `cutile::jit_cache::enable(...)`. Set
+- **The disk cache is opt-in.** Call `cutile::jit_cache::enable(...)`
+  (wrapped as `tilekit::enable_jit_cache()`). Set
   `CUTILE_JIT_TIMING=1` to see stage timings and whether the compiled cubin came
   from disk or `tileiras`.
 - **Kernels are specialized on the divisibility of their integer scalars.**
@@ -133,4 +137,5 @@ into different hits.
   or temporal accumulation while the camera is still.
 - A 16x16 kernel: finer early exit, but it needs a second copy of the kernel,
   since the shape is a literal.
-- Pinned host memory for the download, now about 20% of the frame.
+- Launch frame N+1 before presenting frame N, so the GPU works while the
+  window (about 1 ms per frame) is busy.

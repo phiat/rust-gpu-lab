@@ -54,9 +54,10 @@ for the whole pipeline replayed as one CUDA graph.
 | 640x352, 32 x 64             | 28 ms     | 36 ms        | 0.12 ms   | 1.25 ms   | 1.78 ms          | 2.21 ms                  |
 | 1280x704, 32 x 64 (12 passes)| 37 ms     | 161 ms       | 0.27 ms   | 3.40 ms   | 3.94 ms          | 6.50 ms                  |
 
-The window at its defaults (640x352 world, 32 rays) runs at about 355 fps, or
+The window at its defaults (640x352 world, 32 rays) runs at about 360 fps, or
 460 fps at 16 rays. Besides the GPU frame, each window frame uploads the scene
-(0.13 ms) and downloads the image (0.22 ms).
+(0.14 ms) and downloads the image (0.12 ms) through pinned host buffers
+(`tilekit::Pinned`; see `filters/README.md`).
 
 **Everything matches the CPU exactly.** Seeds, distances and nearest-surface
 colors are integer or correctly rounded math, so they match bit for bit, both

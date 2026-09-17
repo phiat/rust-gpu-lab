@@ -12,6 +12,8 @@ use std::sync::Arc;
 use cuda_core::Stream;
 use cutile::prelude::*;
 
+use tilekit::{Eager, Pinned, Submit};
+
 use crate::Dims;
 
 #[cutile::module]
@@ -177,29 +179,6 @@ pub mod kernels {
     }
 }
 
-/// Runs a device op either eagerly or as part of a graph capture, so the
-/// chain is written once for both.
-pub trait Submit {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error>;
-}
-
-/// Launch and synchronize each op as it's submitted.
-pub struct Eager<'a>(pub &'a Arc<Stream>);
-
-impl Submit for Eager<'_> {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error> {
-        op.sync_on(self.0)?;
-        Ok(())
-    }
-}
-
-impl Submit for Scope {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error> {
-        self.record(op)?;
-        Ok(())
-    }
-}
-
 /// Views of `src` at column offsets 0..=4, each `rows x (cols - 4)`.
 fn col_views(src: &Tensor<u8>) -> Result<[TensorView<'_, u8>; 5], Error> {
     let (rows, cols) = (src.shape()[0] as usize, src.shape()[1] as usize);
@@ -242,6 +221,10 @@ pub struct Pipeline {
     /// Per blur pass: horizontal result (u16) and vertical result (u8).
     blur: Vec<(Tensor<u16>, Tensor<u8>)>,
     edges: Tensor<u8>,
+    /// Pinned host copies of `rgba` and `edges`: frames go in and out
+    /// through these with no allocation per frame.
+    frame_in: Pinned<u8>,
+    frame_out: Pinned<u8>,
 }
 
 impl Pipeline {
@@ -266,12 +249,26 @@ impl Pipeline {
             gray,
             blur,
             edges,
+            frame_in: Pinned::new(stream, dims.padded_rows() * dims.padded_cols() * 4)?,
+            frame_out: Pinned::new(stream, dims.rows * dims.cols)?,
         })
     }
 
-    /// Copy a padded RGBA frame into the input buffer (no reallocation, so a
-    /// captured graph stays valid).
-    pub fn upload(&mut self, padded_rgba: Vec<u8>) -> Result<(), Error> {
+    /// The padded RGBA frame to upload next. Write pixels straight into it
+    /// (a decoder or camera would), then call `upload`.
+    pub fn frame_in(&mut self) -> &mut [u8] {
+        self.frame_in.as_mut_slice()
+    }
+
+    /// Copy `frame_in` into the input buffer. The buffer is reused, so a
+    /// captured graph stays valid.
+    pub fn upload(&mut self) -> Result<(), Error> {
+        self.frame_in.upload(&mut self.rgba, &self.stream)
+    }
+
+    /// The slow way, for comparison: allocate a device tensor, copy from
+    /// pageable memory, then copy device to device into the input buffer.
+    pub fn upload_pageable(&mut self, padded_rgba: Vec<u8>) -> Result<(), Error> {
         let shape = [self.dims.padded_rows(), self.dims.padded_cols(), 4];
         let src = api::copy_host_vec_to_device(&Arc::new(padded_rgba))
             .sync_on(&self.stream)?
@@ -345,7 +342,15 @@ impl Pipeline {
         &self.stream
     }
 
-    pub fn download_edges(&self) -> Result<Vec<u8>, Error> {
+    /// Copy the edge map into the pinned output buffer and borrow it.
+    pub fn download_edges(&mut self) -> Result<&[u8], Error> {
+        self.frame_out.download(&self.edges, &self.stream)?;
+        Ok(self.frame_out.as_slice())
+    }
+
+    /// The slow way, for comparison: duplicate on the device (`to_host_vec`
+    /// consumes its tensor), then copy into a new pageable `Vec`.
+    pub fn download_edges_pageable(&self) -> Result<Vec<u8>, Error> {
         Ok(self.edges.dup().to_host_vec().sync_on(&self.stream)?)
     }
 

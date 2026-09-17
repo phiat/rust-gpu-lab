@@ -109,6 +109,7 @@ fn load_source(src: &Source) -> Result<(Dims, RgbImage, bool), Box<dyn std::erro
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tilekit::enable_jit_cache()?;
     match Cli::parse().cmd {
         Cmd::Run { src, out_dir } => run(&src, &out_dir),
         Cmd::Bench { src, frames } => bench(&src, frames),
@@ -125,7 +126,8 @@ fn run(src: &Source, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
     let stream = Device::new(0)?.new_stream()?;
     let mut p = Pipeline::new(&stream, dims, src.tile)?;
-    p.upload(padded.clone())?;
+    p.frame_in().copy_from_slice(&padded);
+    p.upload()?;
     let t = Instant::now();
     p.run_eager()?;
     let first = t.elapsed();
@@ -133,7 +135,7 @@ fn run(src: &Source, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     p.run_eager()?;
     let warm = t.elapsed();
 
-    let edges = p.download_edges()?;
+    let edges = p.download_edges()?.to_vec();
     let (gray, blurred) = p.download_stages()?;
     let (w, h) = (dims.cols as u32, dims.rows as u32);
     GrayImage::from_raw(w, h, gray)
@@ -185,53 +187,83 @@ fn bench(src: &Source, frames: usize) -> Result<(), Box<dyn std::error::Error>> 
 
     let stream = Device::new(0)?.new_stream()?;
     let mut p = Pipeline::new(&stream, dims, src.tile)?;
-    p.upload(padded.clone())?;
+    p.frame_in().copy_from_slice(&padded);
+    p.upload()?;
     p.run_eager()?; // JIT compile every stage
 
     // Eager: each stage is launched and synchronized in turn.
     let mut times = Timings::default();
-    let mut edges = Vec::new();
     for _ in 0..frames {
-        let t = Instant::now();
-        p.upload(padded.clone())?;
-        times.upload += t.elapsed();
+        times.transfer_in(&mut p, &padded)?;
         let t = Instant::now();
         p.run_eager()?;
         times.filter += t.elapsed();
-        let t = Instant::now();
-        edges = p.download_edges()?;
-        times.download += t.elapsed();
+        times.transfer_out(&mut p)?;
     }
     times.report("gpu eager", frames, cpu_frame);
-    println!("    matches cpu: {}", edges == reference);
+    println!("    matches cpu: {}", p.download_edges()? == reference);
 
     // Graph: the whole chain replayed with one launch per frame.
     let graph = p.capture()?;
     let mut times = Timings::default();
     for _ in 0..frames {
-        let t = Instant::now();
-        p.upload(padded.clone())?;
-        times.upload += t.elapsed();
+        times.transfer_in(&mut p, &padded)?;
         let t = Instant::now();
         graph.launch().sync_on(p.stream())?;
         times.filter += t.elapsed();
-        let t = Instant::now();
-        edges = p.download_edges()?;
-        times.download += t.elapsed();
+        times.transfer_out(&mut p)?;
     }
     times.report("gpu graph", frames, cpu_frame);
-    println!("    matches cpu: {}", edges == reference);
+    println!("    matches cpu: {}", p.download_edges()? == reference);
+    println!(
+        "    upload includes {} writing the frame into the pinned buffer",
+        ms(times.fill / frames as u32)
+    );
+
+    // The same transfers through pageable memory and per-frame allocations.
+    let (mut up, mut down) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..frames {
+        let t = Instant::now();
+        p.upload_pageable(padded.clone())?;
+        up += t.elapsed();
+        let t = Instant::now();
+        let _edges = p.download_edges_pageable()?;
+        down += t.elapsed();
+    }
+    println!(
+        "pageable transfers       upload {} + download {} (pinned buffers avoid this)",
+        ms(up / frames as u32),
+        ms(down / frames as u32)
+    );
     Ok(())
 }
 
 #[derive(Default)]
 struct Timings {
+    /// Part of `upload`: copying the frame into the pinned buffer.
+    fill: Duration,
     upload: Duration,
     filter: Duration,
     download: Duration,
 }
 
 impl Timings {
+    fn transfer_in(&mut self, p: &mut Pipeline, frame: &[u8]) -> Result<(), Error> {
+        let t = Instant::now();
+        p.frame_in().copy_from_slice(frame);
+        self.fill += t.elapsed();
+        p.upload()?;
+        self.upload += t.elapsed();
+        Ok(())
+    }
+
+    fn transfer_out(&mut self, p: &mut Pipeline) -> Result<(), Error> {
+        let t = Instant::now();
+        p.download_edges()?;
+        self.download += t.elapsed();
+        Ok(())
+    }
+
     fn report(&self, label: &str, frames: usize, cpu_frame: Duration) {
         let n = frames as u32;
         let (up, filt, down) = (self.upload / n, self.filter / n, self.download / n);

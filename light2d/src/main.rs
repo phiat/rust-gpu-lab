@@ -205,9 +205,7 @@ const PALETTE: [[u8; 3]; 6] = [
 ];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    cutile::jit_cache::enable(std::sync::Arc::new(
-        cutile::jit_cache::FileSystemJitStore::default_location()?,
-    ));
+    tilekit::enable_jit_cache()?;
     match Cli::parse().cmd {
         Cmd::Run {
             width,
@@ -298,7 +296,7 @@ fn run(lay: Layout, scale: usize, q: Quality) -> Result<(), Box<dyn std::error::
                 }
                 Key::P => {
                     let path = format!("light2d-{}.png", settings.frame);
-                    to_image(&pipeline.download_frame()?, lay).save(&path)?;
+                    to_image(pipeline.download_frame()?, lay).save(&path)?;
                     println!("\nsaved {path}");
                 }
                 _ => {}
@@ -354,11 +352,10 @@ fn run(lay: Layout, scale: usize, q: Quality) -> Result<(), Box<dyn std::error::
         stats.download += t.elapsed();
         settings.frame += 1;
         // Brush outline.
-        let mut pixels = pixels;
         if let Some((mx, my)) = mouse {
-            outline(&mut pixels, lay, mx, my, brush);
+            outline(pixels, lay, mx, my, brush);
         }
-        window.update_with_buffer(&pixels, lay.cols, lay.rows)?;
+        window.update_with_buffer(pixels, lay.cols, lay.rows)?;
         stats.frames += 1;
 
         if last_title.elapsed() >= Duration::from_secs(1) {
@@ -437,7 +434,7 @@ fn render(
         graphs[i as usize % 2].launch().sync_on(pipeline.stream())?;
     }
     let per_frame = t.elapsed() / frames.max(1);
-    to_image(&pipeline.download_frame()?, lay).save(out)?;
+    to_image(pipeline.download_frame()?, lay).save(out)?;
     println!(
         "{}x{}, {} rays x {} steps: {:.2} ms/frame (flood + light + compose), {} frames averaged -> {}",
         lay.cols,

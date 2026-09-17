@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use cuda_core::Stream;
 use cutile::prelude::*;
+use tilekit::Pinned;
 
 use crate::scene::PARAMS;
 
@@ -503,6 +504,10 @@ pub struct Renderer {
     pub quality: Quality,
     params: Tensor<f32>,
     frame: Tensor<i32>,
+    /// Pinned host copies of the two buffers, so per-frame transfers don't
+    /// allocate and the GPU copies directly from and to them.
+    params_host: Pinned<f32>,
+    frame_host: Pinned<i32>,
 }
 
 impl Renderer {
@@ -517,6 +522,8 @@ impl Renderer {
             quality,
             params: api::zeros::<f32>(&[PARAMS]).sync_on(stream)?,
             frame: api::zeros::<i32>(&[height, width]).sync_on(stream)?,
+            params_host: Pinned::new(stream, PARAMS)?,
+            frame_host: Pinned::new(stream, height * width)?,
         })
     }
 
@@ -527,12 +534,11 @@ impl Renderer {
     /// Copy a new parameter block into the existing device buffer, so a
     /// captured graph sees it on its next launch.
     pub fn set_params(&mut self, params: &[f32; PARAMS]) -> Result<(), Error> {
-        let src = api::copy_host_vec_to_device(&Arc::new(params.to_vec())).sync_on(&self.stream)?;
-        api::memcpy(&mut self.params, &src).sync_on(&self.stream)?;
-        Ok(())
+        self.params_host.as_mut_slice().copy_from_slice(params);
+        self.params_host.upload(&mut self.params, &self.stream)
     }
 
-    fn op(&mut self) -> impl GraphNode + DeviceOp + '_ {
+    fn op(&mut self) -> impl GraphNode + '_ {
         let q = self.quality;
         kernels::render(
             (&mut self.frame).partition([TILE, TILE]),
@@ -559,9 +565,9 @@ impl Renderer {
         })?)
     }
 
-    /// Copy the frame to the host as 0x00RRGGBB pixels.
-    pub fn download(&self) -> Result<Vec<u32>, Error> {
-        let pixels = self.frame.dup().to_host_vec().sync_on(&self.stream)?;
-        Ok(pixels.into_iter().map(|p| p as u32).collect())
+    /// Copy the frame to the host and borrow it as 0x00RRGGBB pixels.
+    pub fn download(&mut self) -> Result<&[u32], Error> {
+        self.frame_host.download(&self.frame, &self.stream)?;
+        Ok(tilekit::as_u32(self.frame_host.as_slice()))
     }
 }

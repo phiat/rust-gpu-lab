@@ -6,6 +6,15 @@
 //! and its `exp` differs from libm in the last bits. Sphere tracing
 //! amplifies those differences near silhouettes.
 
+// The math below mirrors the GPU kernel expression for expression (same
+// operation order, same `min(max(..))` clamps, same literals), so that the
+// two can be compared. Clippy's tidier spellings would hide that.
+#![allow(
+    clippy::assign_op_pattern,
+    clippy::manual_clamp,
+    clippy::excessive_precision
+)]
+
 use rayon::prelude::*;
 
 use crate::gpu::Quality;

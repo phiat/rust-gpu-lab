@@ -1,6 +1,15 @@
 //! CPU references: jump flooding with the kernel's exact integer math, and
 //! an exact Euclidean distance transform to measure how far JFA is off.
 
+// The math below mirrors the GPU kernel expression for expression (same
+// operation order, same `min(max(..))` clamps, same literals), so that the
+// two can be compared. Clippy's tidier spellings would hide that.
+#![allow(
+    clippy::assign_op_pattern,
+    clippy::manual_clamp,
+    clippy::excessive_precision
+)]
+
 use rayon::prelude::*;
 
 use crate::gpu::TILE;

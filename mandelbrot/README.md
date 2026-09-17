@@ -28,8 +28,9 @@ agreed on 100% of pixels.
 ## Results
 
 RTX 4070 Ti SUPER, i9-14900KF (28 threads), WSL2, 1920x1080, 64x64 tiles.
-GPU times are warm medians. Each new process first pays about 350-550 ms of JIT
-compilation.
+GPU times are warm medians. The first run pays about 350-550 ms of JIT
+compilation per kernel; later runs load the compiled kernel from cuTile's disk
+cache and start in about 250 ms.
 
 Default view, 1000 iterations:
 
@@ -94,7 +95,8 @@ rounds the grid up and masks stores in the edge tiles.
 
 ## Ideas to try next
 
-- Persist the JIT cache across runs (see cutile's `jit_disk_cache` example).
+- Download through a pinned buffer (`tilekit::Pinned`): the 8 MB download takes
+  3 ms, four times longer than the render.
 - Move the palette onto the GPU so it outputs RGBA directly. It has to be RGBA,
   not RGB: tile dimensions must be powers of two, so `[B, B, 4]` works and
   `[B, B, 3]` doesn't.

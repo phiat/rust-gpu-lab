@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use cuda_core::Stream;
 use cutile::prelude::*;
+use tilekit::{Eager, Pinned, Submit};
 
 use crate::Layout;
 
@@ -501,27 +502,6 @@ pub mod kernels {
     }
 }
 
-pub trait Submit {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error>;
-}
-
-/// Launch and synchronize each op as it's submitted.
-pub struct Eager<'a>(pub &'a Arc<Stream>);
-
-impl Submit for Eager<'_> {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error> {
-        op.sync_on(self.0)?;
-        Ok(())
-    }
-}
-
-impl Submit for Scope {
-    fn submit<T: Send, N: GraphNode + DeviceOp<Output = T>>(&self, op: N) -> Result<(), Error> {
-        self.record(op)?;
-        Ok(())
-    }
-}
-
 /// The nine views of `src` for a jump of `k` pixels, in `jfa_step` order,
 /// plus the block offsets (back, ahead).
 fn jump_views(src: &Tensor<i32>, k: usize) -> Result<([TensorView<'_, i32>; 9], i32, i32), Error> {
@@ -576,6 +556,13 @@ pub struct Pipeline {
     /// read and which is written, so there are two captured graphs.
     light: [Tensor<f32>; 2],
     frame: Tensor<i32>,
+    /// Pinned host copies for the per-frame transfers: no allocation, and
+    /// the GPU copies directly from and to them.
+    params_host: Pinned<f32>,
+    scene_host: Pinned<i32>,
+    frame_host: Pinned<i32>,
+    /// `frame_host` without the ghost ring.
+    pixels: Vec<u32>,
 }
 
 impl Pipeline {
@@ -599,6 +586,10 @@ impl Pipeline {
                 api::zeros::<f32>(&rgba).sync_on(stream)?,
             ],
             frame: api::zeros::<i32>(&shape).sync_on(stream)?,
+            params_host: Pinned::new(stream, PARAMS)?,
+            scene_host: Pinned::new(stream, shape[0] * shape[1])?,
+            frame_host: Pinned::new(stream, shape[0] * shape[1])?,
+            pixels: vec![0; layout.rows * layout.cols],
         })
     }
 
@@ -608,17 +599,13 @@ impl Pipeline {
 
     /// Copy a host scene (`buf_rows x buf_cols`, packed) into the fixed buffer.
     pub fn upload_scene(&mut self, scene: &[i32]) -> Result<(), Error> {
-        let src = api::copy_host_vec_to_device(&Arc::new(scene.to_vec()))
-            .sync_on(&self.stream)?
-            .reshape(&[self.layout.buf_rows(), self.layout.buf_cols()])?;
-        api::memcpy(&mut self.scene, &src).sync_on(&self.stream)?;
-        Ok(())
+        self.scene_host.as_mut_slice().copy_from_slice(scene);
+        self.scene_host.upload(&mut self.scene, &self.stream)
     }
 
     pub fn set_params(&mut self, params: &[f32; PARAMS]) -> Result<(), Error> {
-        let src = api::copy_host_vec_to_device(&Arc::new(params.to_vec())).sync_on(&self.stream)?;
-        api::memcpy(&mut self.params, &src).sync_on(&self.stream)?;
-        Ok(())
+        self.params_host.as_mut_slice().copy_from_slice(params);
+        self.params_host.upload(&mut self.params, &self.stream)
     }
 
     /// Seed, flood, then derive the distance and nearest-surface fields.
@@ -746,14 +733,17 @@ impl Pipeline {
     }
 
     /// The composed frame without the ghost ring, as 0x00RRGGBB.
-    pub fn download_frame(&self) -> Result<Vec<u32>, Error> {
-        let buf = self.frame.dup().to_host_vec().sync_on(&self.stream)?;
+    ///
+    /// The slice is a host copy that the next download overwrites, so the
+    /// caller may draw overlays into it.
+    pub fn download_frame(&mut self) -> Result<&mut [u32], Error> {
+        self.frame_host.download(&self.frame, &self.stream)?;
+        let buf = tilekit::as_u32(self.frame_host.as_slice());
         let (bc, lay) = (self.layout.buf_cols(), self.layout);
-        let mut out = Vec::with_capacity(lay.rows * lay.cols);
-        for r in 0..lay.rows {
+        for (r, line) in self.pixels.chunks_exact_mut(lay.cols).enumerate() {
             let start = (TILE + r) * bc + TILE;
-            out.extend(buf[start..start + lay.cols].iter().map(|&p| p as u32));
+            line.copy_from_slice(&buf[start..start + lay.cols]);
         }
-        Ok(out)
+        Ok(&mut self.pixels)
     }
 }

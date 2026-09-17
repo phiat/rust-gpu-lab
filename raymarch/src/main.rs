@@ -115,9 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tileiras takes ~30 s to compile this kernel, so keep the compiled
     // cubin on disk (~/.cache/cutile/kernels) across runs. Editing the
     // kernel changes its key and pays the compile again.
-    cutile::jit_cache::enable(std::sync::Arc::new(
-        cutile::jit_cache::FileSystemJitStore::default_location()?,
-    ));
+    tilekit::enable_jit_cache()?;
     match Cli::parse().cmd {
         Cmd::Run {
             width,
@@ -206,7 +204,7 @@ fn run(
                 }
                 Key::P => {
                     let path = format!("raymarch-{:.2}.png", frame.time);
-                    to_image(&renderer.download()?, width, height).save(&path)?;
+                    to_image(renderer.download()?, width, height).save(&path)?;
                     println!("\nsaved {path}");
                 }
                 _ => {}
@@ -265,7 +263,7 @@ fn run(
         let t = Instant::now();
         let pixels = renderer.download()?;
         stats.download += t.elapsed();
-        window.update_with_buffer(&pixels, width, height)?;
+        window.update_with_buffer(pixels, width, height)?;
         stats.frames += 1;
 
         if last_title.elapsed() >= Duration::from_secs(1) {
@@ -322,14 +320,14 @@ fn render(shot: &Shot, out: &Path, compare: bool) -> Result<(), Box<dyn std::err
         ms(first),
         ms(warm)
     );
-    to_image(&pixels, frame.width, frame.height).save(out)?;
+    to_image(pixels, frame.width, frame.height).save(out)?;
     println!("wrote {}", out.display());
 
     if compare && frame.view == View::Shaded {
         let t = Instant::now();
         let reference = cpu::render(&params, frame.width, frame.height, frame.quality);
         println!("cpu rayon {:.1} ms", ms(t.elapsed()));
-        println!("vs cpu: {}", Diff::new(&pixels, &reference));
+        println!("vs cpu: {}", Diff::new(pixels, &reference));
     }
     Ok(())
 }
@@ -369,7 +367,7 @@ fn bench(shot: &Shot, frames: usize, cpu_frames: usize) -> Result<(), Box<dyn st
         r.render_eager()?;
     }
     report("gpu eager", t.elapsed() / frames as u32, cpu_frame);
-    println!("    vs cpu: {}", Diff::new(&r.download()?, &reference));
+    println!("    vs cpu: {}", Diff::new(r.download()?, &reference));
 
     let graph = r.capture()?;
     let t = Instant::now();

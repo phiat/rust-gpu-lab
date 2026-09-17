@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["mandelbrot", "life", "filters", "raymarch", "light2d"]
+members = ["tilekit", "mandelbrot", "life", "filters", "raymarch", "light2d"]
 
 [workspace.package]
 edition = "2021"
@@ -11,6 +11,7 @@ rust-version = "1.89"
 # Pinned because the project is pre-1.0 and breaks API often.
 cutile = { git = "https://github.com/NVlabs/cutile-rs", rev = "d92c160" }
 cuda-core = { git = "https://github.com/NVlabs/cutile-rs", rev = "d92c160" }
+tilekit = { path = "tilekit" }
 rayon = "1.10"
 clap = { version = "4", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

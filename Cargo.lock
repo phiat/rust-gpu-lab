@@ -494,6 +494,7 @@ dependencies = [
  "cutile",
  "image",
  "rayon",
+ "tilekit",
 ]
 
 [[package]]
@@ -808,6 +809,7 @@ dependencies = [
  "cutile",
  "minifb",
  "rayon",
+ "tilekit",
 ]
 
 [[package]]
@@ -820,6 +822,7 @@ dependencies = [
  "image",
  "minifb",
  "rayon",
+ "tilekit",
 ]
 
 [[package]]
@@ -872,6 +875,7 @@ dependencies = [
  "cutile",
  "image",
  "rayon",
+ "tilekit",
 ]
 
 [[package]]
@@ -1178,6 +1182,7 @@ dependencies = [
  "image",
  "minifb",
  "rayon",
+ "tilekit",
 ]
 
 [[package]]
@@ -1456,6 +1461,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "tilekit"
+version = "0.1.0"
+dependencies = [
+ "cuda-core",
+ "cutile",
 ]
 
 [[package]]

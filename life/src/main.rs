@@ -111,6 +111,7 @@ impl Layout {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tilekit::enable_jit_cache()?;
     match Cli::parse().cmd {
         Cmd::Run {
             width,

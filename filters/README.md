@@ -6,7 +6,7 @@ Sobel edge detection. Every stage is integer math, so the result is checked bit
 for bit against a CPU version.
 
 ```
-src/gpu.rs   kernels, Submit trait (eager or graph), Pipeline with preallocated stage buffers
+src/gpu.rs   kernels, Pipeline with preallocated stage buffers and pinned frame buffers
 src/cpu.rs   rayon reference with identical integer math
 src/main.rs  padding, synthetic test image, `run` (PNGs) and `bench` (frame stream)
 ```
@@ -36,10 +36,32 @@ i9-14900KF (28 threads), WSL2. Times are per frame.
 | GPU eager    | 0.84 ms | 0.76 ms | 0.94 ms |
 | GPU graph    | 0.66 ms | 0.64 ms | 0.77 ms |
 
-End to end it runs at about 170 fps. Upload (~4.5 ms) now dominates, and
-filtering is the cheap part. The upload includes a host-side copy of the 33 MB
-RGBA frame, a device allocation, and a pageable host-to-device copy, so that's
-the next thing to optimize.
+Filtering is the cheap part: moving the frame costs several times more. Per
+frame, with the graph:
+
+| transfers                         | upload  | download | end to end |
+|-----------------------------------|---------|----------|------------|
+| pageable `Vec`, new device tensor | 4.6 ms  | 0.8 ms   | ~170 fps   |
+| pinned buffers, reused            | 3.0 ms  | 0.4 ms   | ~245 fps   |
+
+## Transfers: pinned buffers
+
+The first version uploaded with `api::copy_host_vec_to_device`. Per frame that
+clones the 33 MB frame into a new `Vec`, allocates a device tensor, copies
+from pageable memory (which the driver first stages through its own pinned
+buffer), then copies device to device into the buffer the graph reads.
+Downloads did the mirror image: `dup()` on the device, because
+`to_host_vec()` consumes its tensor, then a copy into a new `Vec`.
+
+`tilekit::Pinned` replaces both. It allocates page-locked host memory once
+(`cuMemAllocHost`), which the GPU can read and write directly, and each
+transfer is one `cuMemcpy*Async` between it and the tensor the kernels
+already use. cuTile has no safe wrapper for this yet, so it goes through
+`cuda-core` with `tensor.device_pointer()` in a few lines of `unsafe`.
+
+Of the 3.0 ms upload, 1.3 ms is the benchmark copying the frame into the
+pinned buffer; the transfer itself runs at about 20 GB/s. A decoder or camera
+writing straight into `Pipeline::frame_in()` would skip that copy.
 
 ## How the stencils work: "valid" convolution
 
@@ -65,7 +87,8 @@ views per pass instead of 25 for a full 5x5 kernel.
 `.then(|out| next_op)` passes the previous stage's *owned* output to a closure.
 A stencil stage needs *borrowed* views of that output, and views created inside
 the closure can't outlive it. So the pipeline preallocates every stage buffer
-and defines the chain once, against a small trait:
+and defines the chain once, against a small trait (now in `tilekit`, shared
+with `light2d`):
 
 ```rust
 pub trait Submit {
@@ -111,6 +134,8 @@ buffer, and one graph launch runs all six kernels.
 
 ## Ideas to try next
 
-- Pinned host buffers for upload and download, now the end-to-end bottleneck.
+- Overlap transfers with compute: upload frame N+1 on a second stream while
+  frame N is filtered.
+- Upload 3 bytes per pixel instead of 4 (the alpha channel is padding).
 - Compare f32 Sobel with `sqrt(gx² + gy²)` against the integer L1 version.
 - Push a live video stream or webcam frames through the captured graph.

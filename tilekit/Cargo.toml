@@ -1,5 +1,5 @@
 [package]
-name = "mandelbrot"
+name = "tilekit"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -7,7 +7,3 @@ rust-version.workspace = true
 [dependencies]
 cutile.workspace = true
 cuda-core.workspace = true
-tilekit.workspace = true
-clap.workspace = true
-rayon.workspace = true
-image.workspace = true
