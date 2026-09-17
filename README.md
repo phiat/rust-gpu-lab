@@ -128,3 +128,7 @@ Every crate follows the same shape:
 - An async job server (axum) that queues GPU work.
 - An MNIST MLP, and embedding search.
 - A kernel shootout against CUDA C++ and cuda-oxide.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
