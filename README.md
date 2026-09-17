@@ -126,12 +126,39 @@ tilekit/src/          shared: pinned transfer buffers, Submit trait, JIT cache s
 | The generic tile shape type bug, and writing literal shapes to avoid it      | `filters`, `raymarch`  |
 | Matching float kernels to the CPU (within 1/255, then exactly)               | `raymarch`, `light2d`  |
 
-## Possible next demos
+## Roadmap
 
-- Simulations: Gray-Scott reaction-diffusion, Lattice Boltzmann, stable fluids.
-- An async job server (axum) that queues GPU work.
-- An MNIST MLP, and embedding search.
-- A kernel shootout against CUDA C++ and cuda-oxide.
+Next up, in this order. All four are grid-shaped, so the stencil, gather and
+CUDA graph lessons carry over:
+
+1. **Falling sand** (Noita-style): sand, water, fire and smoke as cell types,
+   painted with the mouse. Teaches moving cells without write conflicts (2x2
+   Margolus blocks that shift each pass) and per-cell random numbers.
+2. **Cloth and soft bodies**: a grid of particles joined by constraints, with
+   wind and a collider. Teaches an iterative solver with red/black passes, and
+   a grid that holds objects instead of pixels.
+3. **Smoke and fluid** (stable fluids): advection as an interpolated gather, a
+   20-40 pass pressure solve per frame, and `light2d`-style painted obstacles.
+4. **Flow-field pathfinding with crowds**: a distance-to-goal field that
+   respects walls, its gradient as a direction field, and thousands of agents
+   that sample it.
+
+Later:
+
+5. **Terrain with hydraulic erosion**: procedural noise, grid-based erosion
+   (water and sediment layers), and a heightfield ray marcher.
+6. **Voxel world ray tracer**: a 3D block grid traced cell by cell, with
+   sunlight shadows. 3D tensors, and a gather at every step.
+7. **Post-processing stack** for `raymarch`: bloom, tone mapping, depth of
+   field, FXAA. Kernels at different resolutions feeding each other in one
+   graph.
+8. **Boids with neighbor search**: flocking needs nearby agents, and the tile
+   model has no scatter or sort. Try splatting agents into a density and
+   velocity grid instead.
+
+Also on the list: Gray-Scott reaction-diffusion, Lattice Boltzmann, an async
+job server (axum) that queues GPU work, an MNIST MLP, embedding search, and a
+kernel shootout against CUDA C++ and cuda-oxide.
 
 ## License
 
