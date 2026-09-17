@@ -10,14 +10,16 @@ into CUDA kernels.
 Each crate in this workspace is one self-contained demo. Every demo includes:
 
 - a CPU reference (rayon) with the same math, which checks the GPU output,
-- a `bench` command comparing CPU, GPU and GPU replayed as a CUDA graph,
+- a `bench` command comparing CPU and GPU times (and, from `life` on, the
+  GPU replaying a CUDA graph),
 - a README covering results, what the demo teaches, and the cuTile gotchas hit
   while building it.
 
 ## Demos
 
 In the order they were built; each one builds on the lessons of the previous
-ones.
+ones. The crate READMEs number them in the order they were first planned, and
+call this workspace by its working name, `tileworld`.
 
 | crate                        | what it is                                                                 | CPU (rayon)       | GPU                 |
 |------------------------------|----------------------------------------------------------------------------|-------------------|---------------------|
