@@ -5,6 +5,8 @@ NVIDIA's tile-based kernel DSL. Kernels are ordinary Rust functions that work on
 fixed-size blocks ("tiles") of data. cuTile JIT compiles them through Tile IR
 into CUDA kernels.
 
+![raymarch: SDF scene with soft shadows, ambient occlusion and fog](docs/images/raymarch.png)
+
 Each crate in this workspace is one self-contained demo. Every demo includes:
 
 - a CPU reference (rayon) with the same math, which checks the GPU output,
@@ -31,6 +33,31 @@ at 32 rays per pixel (its CPU time covers the distance field and lighting, not
 the final compose). GPU times are the fastest path, eager or CUDA graph.
 Measured on an RTX 4070 Ti SUPER and an i9-14900KF (28 threads) under WSL2.
 See each crate's README for the full tables.
+
+## Screenshots
+
+**`light2d`**: the demo scene lit by three lights, then the same frame's
+distance field, nearest surface (Voronoi) and raw radiance (left to right, top
+to bottom).
+
+![light2d: lit view, distance field, Voronoi and radiance](docs/images/light2d.png)
+
+**`mandelbrot`**: Seahorse Valley at 3000 iterations.
+
+![mandelbrot: Seahorse Valley](docs/images/mandelbrot.jpg)
+
+**`filters`**: a crop of the noisy 4K input and the edge map after two blur
+passes, at full resolution.
+
+![filters: noisy input and Sobel edges](docs/images/filters.jpg)
+
+**`life`**: part of the live window, enlarged 2x. Dying cells leave a short
+cyan trail.
+
+![life: Game of Life window](docs/images/life.png)
+
+The `raymarch` image at the top is a 1920x1080 high-quality render, scaled
+down.
 
 ## Requirements
 

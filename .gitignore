@@ -1,3 +1,4 @@
 /target
 *.png
 filters-out*/
+!docs/images/*.png
