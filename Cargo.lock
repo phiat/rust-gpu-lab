@@ -811,6 +811,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "light2d"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "cuda-core",
+ "cutile",
+ "image",
+ "minifb",
+ "rayon",
+]
+
+[[package]]
 name = "linkme"
 version = "0.3.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -110,8 +110,12 @@ into different hits.
 - **The disk cache is opt-in.** Call `cutile::jit_cache::enable(...)`. Set
   `CUTILE_JIT_TIMING=1` to see stage timings and whether the compiled cubin came
   from disk or `tileiras`.
-- **Kernel scalars aren't part of the cache key** (`generics=` is empty), so
-  switching quality presets doesn't recompile.
+- **Kernels are specialized on the divisibility of their integer scalars.**
+  `generics=` is empty, but the cache key records each integer argument's
+  largest power-of-two divisor, capped at 16 (and the same for tensor shapes,
+  strides and pointers). Every preset's step counts are multiples of 16, so
+  switching presets doesn't recompile. A 100-step preset would. See
+  `light2d`, where this produced 10 variants of one kernel.
 - **A soft-shadow artifact from an underestimating SDF.** The first pillar
   layout was a repeated grid with a courtyard cut out,
   `max(column, 5 - length(xz))`. That is a valid lower bound, but near the cut it
