@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["mandelbrot", "life", "filters"]
+members = ["mandelbrot", "life", "filters", "raymarch"]
 
 [workspace.package]
 edition = "2021"

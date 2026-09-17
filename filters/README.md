@@ -99,7 +99,9 @@ buffer, and one graph launch runs all six kernels.
   the same type``. Ops like `shri`, `select` and `eq_tile` don't check. The
   workaround is to keep each kernel on one side: grayscale is concrete
   (`reduce_sum` plus a `fill` device function), and the stencils are generic
-  (`exti` plus `constant(k, shape![B, B])`).
+  (`exti` plus `constant(k, shape![B, B])`). A cleaner fix, found later in
+  `raymarch`: drop the `const B` generic and write the shapes as literals
+  (`{[32, 32]}`), so there is only one spelling.
 - **Scalar `.broadcast(shape)` only resolves on entry parameters.** On a
   literal or a local `let`, the JIT inlines the trait's placeholder body and
   fails with "unrecognized macro `unreachable`". `Tile::shape()` fails the same
