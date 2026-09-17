@@ -83,9 +83,10 @@ rounds the grid up and masks stores in the edge tiles.
   with "Return type required". Bind the constant to an annotated `let` first.
 - A one-line device function `fn bailout<const BH, const BW>(s: Shape<..>) -> Tile<..>`
   failed at JIT time with ``binary `Le` requires operands of the same type
-  ... `{[BH, BW]}` and `{[32, 32]}` ``: the const generics weren't substituted.
-  Inlining the constant fixed it. `tile_coords`, which also takes a `Shape`,
-  works fine, so the exact trigger is still unclear.
+  ... `{[BH, BW]}` and `{[32, 32]}` ``: the two operands had different tile
+  types. Inlining the constant fixed it. The cause is explained in
+  `filters/README.md`: device-function results get concrete tile types,
+  while constants and nested arithmetic keep generic ones.
 - `to_host_vec()` consumes the tensor, and the `Stream` type comes from
   `cuda-core`, which the cutile prelude doesn't re-export.
 - Everything stays `f32`, so expect pixelation once `--span` drops to around
@@ -94,6 +95,8 @@ rounds the grid up and masks stores in the edge tiles.
 ## Ideas to try next
 
 - Persist the JIT cache across runs (see cutile's `jit_disk_cache` example).
-- Move the palette onto the GPU so it outputs RGB directly (a 3-D output tensor).
+- Move the palette onto the GPU so it outputs RGBA directly. It has to be RGBA,
+  not RGB: tile dimensions must be powers of two, so `[B, B, 4]` works and
+  `[B, B, 3]` doesn't.
 - Generate a zoom animation from a pre-allocated buffer, as a warm-up for
   demo #3 (CUDA graphs).
