@@ -29,15 +29,21 @@ call this workspace by its working name, `tileworld`.
 | [`filters`](filters)         | Grayscale, Gaussian blur and Sobel edges as one bit-exact pipeline          | 11.7 ms           | 0.64 ms             |
 | [`raymarch`](raymarch)       | Real-time SDF ray marcher with soft shadows, AO and fog, in one kernel      | 256 ms            | 4.1 ms              |
 | [`light2d`](light2d)         | Jump flooding and 2D global illumination; paint walls and lights live       | 64 ms             | 1.25 ms             |
+| [`sand`](sand)               | Falling sand: Margolus block automaton with fire, water, oil and smoke     | 6.7 ms            | 0.23 ms             |
 
 Sizes: mandelbrot 1920x1080 at 1000 iterations, life a 4096² world, filters a
 3840x2160 frame, raymarch 1920x1080 at high quality, light2d a 640x352 world
 at 32 rays per pixel (its CPU time covers the distance field and lighting, not
-the final compose). GPU times are the fastest path, eager or CUDA graph.
+the final compose), sand a 640x352 world at 4 passes per frame. GPU times are the fastest path, eager or CUDA graph.
 Measured on an RTX 4070 Ti SUPER and an i9-14900KF (28 threads) under WSL2.
 See each crate's README for the full tables.
 
 ## Screenshots
+
+**`sand`**: the demo scene after 300 frames. Sand and water taps, a pool
+draining off a shelf, oil on the floor, and the wooden hut on fire.
+
+![sand: falling sand demo scene](docs/images/sand.png)
 
 **`light2d`**: the demo scene lit by three lights, then the same frame's
 distance field, nearest surface (Voronoi) and raw radiance (left to right, top
@@ -125,15 +131,16 @@ tilekit/src/          shared: pinned transfer buffers, Submit trait, JIT cache s
 | JIT costs: compile time, the disk cache, specialization on divisibility      | `raymarch`, `light2d`  |
 | The generic tile shape type bug, and writing literal shapes to avoid it      | `filters`, `raymarch`  |
 | Matching float kernels to the CPU (within 1/255, then exactly)               | `raymarch`, `light2d`  |
+| Moving cells without conflicts: Margolus blocks, hashed randomness           | `sand`                 |
+| Per-launch integers through a tensor view, so one kernel variant, not three  | `sand`                 |
+| Fewer tile ops means faster compile *and* faster frames                      | `sand`                 |
 
 ## Roadmap
 
-Next up, in this order. All four are grid-shaped, so the stencil, gather and
-CUDA graph lessons carry over:
+Next up, in this order. All are grid-shaped, so the stencil, gather and CUDA
+graph lessons carry over:
 
-1. **Falling sand** (Noita-style): sand, water, fire and smoke as cell types,
-   painted with the mouse. Teaches moving cells without write conflicts (2x2
-   Margolus blocks that shift each pass) and per-cell random numbers.
+1. ~~**Falling sand**~~: done, see [`sand`](sand).
 2. **Cloth and soft bodies**: a grid of particles joined by constraints, with
    wind and a collider. Teaches an iterative solver with red/black passes, and
    a grid that holds objects instead of pixels.
