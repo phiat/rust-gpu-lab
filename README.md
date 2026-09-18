@@ -30,15 +30,23 @@ call this workspace by its working name, `tileworld`.
 | [`raymarch`](raymarch)       | Real-time SDF ray marcher with soft shadows, AO and fog, in one kernel      | 256 ms            | 4.1 ms              |
 | [`light2d`](light2d)         | Jump flooding and 2D global illumination; paint walls and lights live       | 64 ms             | 1.25 ms             |
 | [`sand`](sand)               | Falling sand: Margolus block automaton with fire, water, oil and smoke     | 6.7 ms            | 0.23 ms             |
+| [`cloth`](cloth)             | Cloth in the wind over a sphere: position based dynamics, 102 launches/frame | 18.6 ms          | 0.91 ms             |
 
 Sizes: mandelbrot 1920x1080 at 1000 iterations, life a 4096² world, filters a
 3840x2160 frame, raymarch 1920x1080 at high quality, light2d a 640x352 world
 at 32 rays per pixel (its CPU time covers the distance field and lighting, not
-the final compose), sand a 640x352 world at 4 passes per frame. GPU times are the fastest path, eager or CUDA graph.
+the final compose), sand a 640x352 world at 4 passes per frame, cloth
+256x160 particles at 4 substeps x 2 iterations (its CPU time is with 8
+threads; see its README). GPU times are the fastest path, eager or CUDA graph.
 Measured on an RTX 4070 Ti SUPER and an i9-14900KF (28 threads) under WSL2.
 See each crate's README for the full tables.
 
 ## Screenshots
+
+**`cloth`**: a curtain of 256x160 particles after 240 frames of wind,
+draped over the sphere.
+
+![cloth: curtain over a sphere](docs/images/cloth.png)
 
 **`sand`**: the demo scene after 300 frames. Sand and water taps, a pool
 draining off a shelf, oil on the floor, and the wooden hut on fire.
@@ -134,6 +142,9 @@ tilekit/src/          shared: pinned transfer buffers, Submit trait, JIT cache s
 | Moving cells without conflicts: Margolus blocks, hashed randomness           | `sand`                 |
 | Per-launch integers through a tensor view, so one kernel variant, not three  | `sand`                 |
 | Fewer tile ops means faster compile *and* faster frames                      | `sand`                 |
+| Coloring constraints into batches (red/black generalized); why it matters    | `cloth`                |
+| Same-shaped views so one kernel serves every stencil direction               | `cloth`                |
+| Where the tile model stops: rasterizing on the CPU                           | `cloth`                |
 
 ## Roadmap
 
@@ -141,9 +152,7 @@ Next up, in this order. All are grid-shaped, so the stencil, gather and CUDA
 graph lessons carry over:
 
 1. ~~**Falling sand**~~: done, see [`sand`](sand).
-2. **Cloth and soft bodies**: a grid of particles joined by constraints, with
-   wind and a collider. Teaches an iterative solver with red/black passes, and
-   a grid that holds objects instead of pixels.
+2. ~~**Cloth**~~: done, see [`cloth`](cloth). Soft bodies are in its ideas.
 3. **Smoke and fluid** (stable fluids): advection as an interpolated gather, a
    20-40 pass pressure solve per frame, and `light2d`-style painted obstacles.
 4. **Flow-field pathfinding with crowds**: a distance-to-goal field that

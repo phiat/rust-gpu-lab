@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["tilekit", "mandelbrot", "life", "filters", "raymarch", "light2d", "sand"]
+members = ["tilekit", "mandelbrot", "life", "filters", "raymarch", "light2d", "sand", "cloth"]
 
 [workspace.package]
 edition = "2021"
